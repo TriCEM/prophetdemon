@@ -19,9 +19,10 @@ df = pd.read_csv(results_file)
 df['Std Dev Degree'] = df['Var Degree']**(1/2)
 df['Edge Density'] = df['Num Edges'] / (100) # edge per node
 df['Clustering'] = df['Clustering'] * 100 # transform to percent 
+df['Final Size'] = df['Final size'] * 10 # multiple by ten instead of 100 for scaling 
 
 df = pd.melt(df, id_vars =['Net Type'],
-             value_vars =['Mean Degree','Std Dev Degree', 'Edge Density', 'Clustering'])
+             value_vars =['Mean Degree','Std Dev Degree', 'Edge Density', 'Clustering', 'Components', 'Final Size'])
 
 # Draw a nested violinplot and split the violins for easier comparison
 sns.set_theme(style="darkgrid")
