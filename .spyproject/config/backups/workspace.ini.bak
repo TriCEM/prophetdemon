@@ -4,7 +4,7 @@ save_data_on_exit = True
 save_history = True
 save_non_project_files = False
 project_type = 'empty-project-type'
-recent_files = ['train_demon_VAE.py', 'utils.py', 'viz/plot_demon_stats.py']
+recent_files = ['train_demon_VAE.py', 'utils.py', 'viz/plot_demon_stats.py', 'train_prophet.py']
 
 [main]
 version = 0.2.0
