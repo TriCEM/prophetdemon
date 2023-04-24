@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 
-Train prophet-dmon model asynchronouly:
+Train prophet-demon model asynchronouly:
     -First train prophet to accurately predict final sizes
     -Then train demon VAE to deteriorate the predictive perfomance of the prophet
 
@@ -206,6 +206,26 @@ def generate(sim,p_vals):
         
     return np.array(final_sizes), np.array(nets)
 
+def generate_demon_sizes(demon_probs):
+    
+    """
+        Simulate final sizes from demon-generated networks
+    """
+    
+    diffs = demon_probs - np.random.uniform(low=0.0, high=1.0, size=(batch_size,n,n))
+    demon_nets = np.where(diffs < 0, 0, 1)
+    dnet_final_sizes = []
+    for idx, d_net in enumerate(demon_nets):
+        demon_adj = np.triu(d_net) + np.triu(d_net).T # enforce symmetric adj requirment
+        sim.beta = demon_adj
+        complete = False
+        while not complete: # make sure sims completes to final time
+            complete, f_size, times, I_traj = sim.run()
+        dnet_final_sizes.append(f_size / n) # normalized by pop size
+        demon_nets[idx] = demon_adj
+    
+    return np.array(dnet_final_sizes), demon_nets # or convert to tensor?
+
 # Sim params
 n = 100 # pop size
 final_time = 10.0 # time simulations should end
@@ -228,60 +248,69 @@ sim = GillespieSim(pops=n,
                     d=nu)
 
 """
-    Set up prophet model
-"""
-batch_size = 10
-prophet = build_prophet(n,batch_size,summary=True)
-
-"""
     Generate training set of nets and final sizes
 """
+batch_size = 10
 p_vals = np.tile(np.linspace(0.02, 0.05, num=16),10)
 train_final_sizes, train_nets = generate(sim, p_vals)
 
 """
-    Pre-train prophet to predict final sizes without demon
+    Set up prophet model:
+    Pre-train or restore prophet to predict final sizes without demon
 """
-episode_losses = train_prophet(prophet, train_final_sizes, train_nets, iterations=500)
-plot_training(episode_losses,'Loss','prophet_pretrain_loss_by_episode.png')
+restore = True
+if restore:
+    prophet = keras.models.load_model("prophet_async_trained.h5")
+else:
+    prophet = build_prophet(n,batch_size,summary=True)
+    episode_losses = train_prophet(prophet, train_final_sizes, train_nets, iterations=500)
+    plot_training(episode_losses,'Loss','prophet_pretrain_loss_by_episode.png')
+    prophet.save("prophet_async_trained.h5")
+
 
 """
     Set up demon model
-"""
-demon = build_demon(n,coding_dim=10,summary=True)
-
-"""
     Pre-train demon model to reconstruct ER-like networks
+    Note: need to save in 'tf' format to serialize custom layers: https://www.tensorflow.org/guide/keras/save_and_serialize#registering_the_custom_object for details.
 """
-episode_losses = train_demon(demon, train_nets, iterations=500)
-plot_training(episode_losses,'Loss','demon_pretrain_loss_by_episode.png')
+restore = True
+if restore:
+    demon = keras.models.load_model("demon_async_trained.tf")
+else:
+    demon = build_demon(n,coding_dim=10,summary=True)
+    episode_losses = train_demon(demon, train_nets, iterations=1000)
+    plot_training(episode_losses,'Loss','demon_pretrain_loss_by_episode.png')
+    demon.save("demon_async_trained.tf",save_format="tf")
 
 """
     Now train demon to trick prophet
-    REMEMBER TO RETURN PRE-TRAINED PROPHET AND DEMON MODELS
 """
 
 """
     Set training params
 """
-batch_size = 1
+batch_size = 10
 iterations = 1000
 train_size = len(train_nets)
+mse_loss_fn = keras.losses.mean_squared_error
 latent_loss_fn = latent_loss()
 reconstruction_loss_fn = keras.losses.BinaryCrossentropy(from_logits=False)
 optimizer = keras.optimizers.Adam(lr=1e-3)
 
 """
+    We expect that the reconstruction and delusion loss might be negatively correlated
+    So need to (over)weight delusion loss
+"""
+delusion_weight = 5.0
+
+"""
     Train demon to reconstruct ER-generated nets
-    
-    Note: Binary cross entropy computes mean over all elements instead of sum
-    But latent loss sums over all latent variables
-    We may therefore be underweighting reconstruction loss relative to latent loss
-    See example here for computing losses on sums instead:
-        https://keras.io/api/losses/probabilistic_losses/
-    Reminder: We would want to take the mean loss over all instances in the batch if batch_size > 1
+    Note: if batch_size > 1, all losses will be computed as averages across training instances in batch
 """
 episode_losses = []
+latent_losses = []
+reconstruction_losses = []
+delusion_losses = []
 for episode in range(iterations):
     
     # Sample realizations for training batch
@@ -293,50 +322,41 @@ for episode in range(iterations):
     true_final_sizes = tf.convert_to_tensor(train_final_sizes[batch_indices])
     true_final_sizes = tf.reshape(true_final_sizes, [batch_size,1])
     predicted_final_sizes = prophet(net_batch)
-    p_abs_errors = tf.math.abs(true_final_sizes - predicted_final_sizes) # prediction error before demon alters networks
+    p_abs_errors = tf.reduce_mean(mse_loss_fn(true_final_sizes,predicted_final_sizes))
     
     with tf.GradientTape() as tape:
         codings_mean, codings_log_var, reconstructions = demon(net_batch)
         lat_loss = latent_loss_fn(codings_mean, codings_log_var)
         rec_loss = reconstruction_loss_fn(net_batch,reconstructions)
         
-        #Sample new demon networks
-        """
-            TODO: WRAP THIS IN A FUNCTION
-        """
+        #Sim new final sizes on demon-generated networks
         demon_probs = reconstructions.numpy()
-        diffs = demon_probs - np.random.uniform(low=0.0, high=1.0, size=(batch_size,n,n))
-        demon_test_nets = np.where(diffs < 0, 0, 1)
-        dnet_final_sizes = []
-        for demon_net in demon_test_nets:
-            demon_adj = np.triu(demon_net) + np.triu(demon_net).T # enforce symmetric adj requirment
-            demon_net = nx.from_numpy_matrix(demon_adj)
-            sim.beta = demon_adj
-            complete = False
-            while not complete: # make sure sims completes to final time
-                complete, f_size, times, I_traj = sim.run()
-            dnet_final_sizes.append(f_size / n) # normalized by pop size
-        dnet_final_sizes = np.array(dnet_final_sizes) # or convert to tensor?
+        dnet_final_sizes, demon_nets = generate_demon_sizes(demon_probs)
         
         # Compute prediction error on demon-generated ents
-        dnet_batch = tf.convert_to_tensor(demon_test_nets)
-        predicted_final_sizes = prophet(dnet_batch)
-        q_abs_errors = tf.math.abs(dnet_final_sizes - predicted_final_sizes)
+        dnet_batch = tf.convert_to_tensor(demon_nets)
+        #predicted_final_sizes = prophet(dnet_batch)
+        q_abs_errors = tf.reduce_mean(mse_loss_fn(dnet_final_sizes,predicted_final_sizes))
         
-        predictive_loss = q_abs_errors - p_abs_errors
+        delusion_loss = delusion_weight * (p_abs_errors - q_abs_errors) # the more negative the better
         
-        loss = lat_loss + rec_loss + predictive_loss # latent loss plus reconstruction loss
+        loss = lat_loss + rec_loss + delusion_loss # latent loss plus reconstruction loss
 
     grads = tape.gradient(loss, demon.trainable_variables)
     optimizer.apply_gradients(zip(grads, demon.trainable_variables))   
 
     if episode % 10 == 0:
-        print('Episode: ' + str(episode) + '; Loss: ' + f'{loss.numpy():.3f}' + '; Latent Loss: ' + f'{lat_loss.numpy():.3f}' + '; Reconstruction Loss: ' + f'{rec_loss.numpy():.3f}')
+        print('Episode: ' + str(episode) + '; Loss: ' + f'{loss.numpy():.3f}' + '; Latent Loss: ' + f'{lat_loss.numpy():.3f}' + '; Reconstruction Loss: ' + f'{rec_loss.numpy():.3f}' + '; Delusion Loss: ' + f'{delusion_loss.numpy():.3f}')
 
     episode_losses.append(loss.numpy())
+    latent_losses.append(lat_loss.numpy())
+    reconstruction_losses.append(rec_loss.numpy())
+    delusion_losses.append(delusion_loss.numpy())
     
-return episode_losses
-
+plot_training(episode_losses,'Loss','demon_loss_by_episode.png')
+plot_training(latent_losses,'Loss','demon_latent_loss_by_episode.png')
+plot_training(reconstruction_losses,'Loss','demon_reconstruction_loss_by_episode.png')
+plot_training(delusion_losses,'Loss','demon_delusion_loss_by_episode.png')
 
 # """
 #     Compare statistical properties of demon-generated vs. ER-generated nets

@@ -78,7 +78,7 @@ demon.summary()
 """
     Set training params
 """
-batch_size = 1
+batch_size = 10
 epochs = 1000
 latent_loss_fn = latent_loss()
 reconstruction_loss_fn = keras.losses.BinaryCrossentropy(from_logits=False)
@@ -98,10 +98,6 @@ episode_losses = []
 for episode in range(epochs):
     
     # Sample realizations for training batch
-    #batch_indices = np.random.choice(train_size, batch_size)
-    #net_batch = tf.convert_to_tensor(train_nets[batch_indices])
-    
-    # For now just sample 1 training network at a time
     batch_indices = np.random.choice(train_size, batch_size)
     net_batch = tf.convert_to_tensor(train_nets[batch_indices])
     
@@ -218,5 +214,5 @@ test_dict = {'Mean Degree': mean_degree,
              'Final size': final_size,
              'Net Type': net_type} 
 df = pd.DataFrame(test_dict)
-results_file = 'demon_net_reconstruction_stats.csv'
+results_file = 'demon_net_reconstruction_stats_batch.csv'
 df.to_csv(results_file,index=False) 

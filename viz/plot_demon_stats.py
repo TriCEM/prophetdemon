@@ -13,7 +13,7 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 
-results_file = '../demon_net_reconstruction_stats.csv'
+results_file = '../demon_net_reconstruction_stats_batch.csv'
 df = pd.read_csv(results_file)
 
 df['Std Dev Degree'] = df['Var Degree']**(1/2)
@@ -42,5 +42,5 @@ plt.xticks(rotation = 90) # Rotates X-Axis Ticks by 45-degrees
 plt.xticks(fontsize=10)
 
 fig.tight_layout()
-png_file = 'demon_vs_ER_net_stats.png'
+png_file = 'demon_vs_ER_net_stats_batch.png'
 fig.savefig(png_file, dpi=200)
