@@ -28,6 +28,8 @@ class GumbelSoftMax(keras.layers.Layer):
         
         self.hard = hard
         
+        self.n = 100
+        
         super().__init__(**kwargs)
     
     def call(self,probs):
@@ -43,7 +45,39 @@ class GumbelSoftMax(keras.layers.Layer):
           be a probabilitiy distribution that sums to 1 across classes
         """
         
-        probs = tf.reshape(probs, [probs.shape[-1],1])
+        #probs = tf.reshape(probs, [self.n,1])
+        #probs = tf.transpose(probs)
+        #probs = tf.reshape(probs, [-1])
+        one_minus_probs = 1.0 - probs
+        logits = tf.math.log(tf.concat([probs, one_minus_probs], 0))
+        
+        logits = tf.transpose(logits)
+        
+        U = tf.random.uniform(tf.shape(logits), minval=0, maxval=1)
+        sample = -tf.math.log(-tf.math.log(U + self.eps) + self.eps)
+        
+        y = logits + sample
+        y = tf.nn.softmax( y / self.temp)
+        
+        if self.hard:
+          #y_hard = tf.cast(tf.one_hot(tf.argmax(y,1),tf.shape(logits)[-1]), y.dtype)
+          y_hard = tf.cast(tf.equal(y,tf.reduce_max(y,1,keepdims=True)),y.dtype)
+          y = tf.stop_gradient(y_hard - y) + y
+        
+        y = tf.reshape(y[:,0], [self.n,self.n]) # treat first column as Bernouli random variable
+        #y = tf.transpose(y[:,0])
+        #y = y[:,0]
+        
+        return y
+    
+    
+    def call_test_version(self,probs):
+        
+        """
+            This version works with setup here in main
+        """
+        
+        #probs = tf.reshape(probs, [probs.shape[-1],1])
         one_minus_probs = 1.0 - probs
         logits = tf.math.log(tf.concat([probs, one_minus_probs], 1))
         
@@ -109,7 +143,7 @@ if __name__ == '__main__':
     
     import time
     tic = time.perf_counter()
-    sample = g.call(probs,temp)
+    sample = g.call(probs)
     toc = time.perf_counter()
     elapsed = toc - tic
 

@@ -71,9 +71,10 @@ x = keras.layers.Dense(150,activation="selu")(x)
 
 #New way with output as relu(sign(x))
 x = keras.layers.Dense(n * n,activation="sigmoid")(x)
-x = keras.layers.Reshape([n*n])(x)
-x = GumbelSoftMax(temp)(x)
-outputs = keras.layers.Reshape([n,n])(x)
+#x = keras.layers.Reshape([n,n])(x)
+#x = keras.layers.Reshape([n*n,])(x)
+outputs = GumbelSoftMax(temp)(x)
+
 
 # Old way
 #if hard:
