@@ -5,10 +5,120 @@
 import numpy as np
 import random
 import json
+from poibin import PoiBin
 
 # terminate_condition = len(self.sample) < 50
 global debug
 debug = False
+
+class PoissonBinomialModel:
+    
+    def __init__(self,**kwargs):
+        
+        self.init_I = kwargs.get('init_I', [1,0,0,0])
+        
+        # Time at which to end sim -- should be consistent terminate_condition
+        self.final_time = kwargs.get('final_time', 5.0)
+            
+        # Transmission rate(s) between pops
+        self.beta = kwargs.get('beta', None)
+            
+        # Removal/recovery rate
+        self.nu = kwargs.get('nu', 1.)
+        
+        # Immune waining rate -- set to np.inf for SIS model OR zero for SIR model
+        self.immunity = kwargs.get('immunity', True)
+        
+        # Time step used to numerically solve infection probs
+        self.time_step = kwargs.get('time_step', 0.1)
+    
+    def approx_final_size_dist(self):
+        
+        """
+            Approximate final-size distribution of epidemic by
+            tracking individual probabilities that each node has been infected
+            Then treat probs of being infected as independent Bernoulli trials
+            and compute final size distribution using DFT approximation to the Poisson-Binomial distribution 
+            Note: Assumes SIS model unless immunity=True for a SIR model
+        """
+
+        beta = self.beta
+        nu = self.nu
+        p = self.init_I # individual probabilities of being infected 
+        r = np.zeros(len(p)) # individual probabilities of being recovered
+        time = 0
+        final_time = self.final_time
+        time_step = self.time_step
+        while time < final_time:
+            
+            # Compute individual-level probs of infection based on transmission rates in beta
+            if self.immunity:
+                pairs_SI = np.outer(p,1-p-r)
+            else:
+                pairs_SI = np.outer(p,1-p) # outer product returns matrix with elements I_i * S_j
+            betaSI = np.multiply(beta,pairs_SI) # element-wise product returns matrix with elements B_i,j * S_j * I_i 
+            trans_rates = np.sum(betaSI,0) # sum over rows i.e. potential infectors
+            trans_probs = 1 - np.exp(-trans_rates * time_step) # convert to infection prob
+            
+            # Compute individual-level recovery probs
+            recov_rates = nu * p
+            recov_probs = 1 - np.exp(-recov_rates * time_step)
+            
+            # Update variables
+            p = p + trans_probs - recov_probs
+            if self.immunity:
+               r = r + recov_probs 
+            time += time_step
+        
+        p_infected = p + r # prob of ever being infected (only works for SIR model)
+        pb = PoiBin(p_infected)
+        x = np.arange(0,len(p_infected)+1)
+        fsd = pb.pmf(x) # final size dist
+        
+        return fsd
+    
+    def mean_final_size(self):
+        
+        """
+            Approximate final-size distribution of epidemic by
+            tracking individual probabilities that each node has been infected
+            Then treat probs of being infected as independent Bernoulli trials
+            and compute final size distribution using DFT approximation to the Poisson-Binomial distribution 
+            Note: Assumes SIS model unless immunity=True for a SIR model
+        """
+
+        beta = self.beta
+        nu = self.nu
+        p = self.init_I # individual probabilities of being infected 
+        r = np.zeros(len(p)) # individual probabilities of being recovered
+        time = 0
+        final_time = self.final_time
+        time_step = self.time_step
+        while time < final_time:
+            
+            # Compute individual-level probs of infection based on transmission rates in beta
+            if self.immunity:
+                pairs_SI = np.outer(p,1-p-r)
+            else:
+                pairs_SI = np.outer(p,1-p) # outer product returns matrix with elements I_i * S_j
+            betaSI = np.multiply(beta,pairs_SI) # element-wise product returns matrix with elements B_i,j * S_j * I_i 
+            trans_rates = np.sum(betaSI,0) # sum over rows i.e. potential infectors
+            trans_probs = 1 - np.exp(-trans_rates * time_step) # convert to infection prob
+            
+            # Compute individual-level recovery probs
+            recov_rates = nu * p
+            recov_probs = 1 - np.exp(-recov_rates * time_step)
+            
+            # Update variables
+            p = p + trans_probs - recov_probs
+            if self.immunity:
+               r = r + recov_probs 
+            time += time_step
+        
+        p_infected = p + r # prob of ever being infected (only works for SIR model)
+        mean_size = np.sum(p_infected)
+        
+        return mean_size
  
 class GillespieSim():
     
@@ -42,7 +152,7 @@ class GillespieSim():
         # Removal/recovery rate
         self.d = kwargs.get('d', 1.)
         
-        # Immune waining rate -- set to np.inf for SIS model
+        # Immune waining rate -- set to np.inf for SIS model OR zero for SIR model
         self.omega = kwargs.get('omega', 0.0)
         
         # Json traj file

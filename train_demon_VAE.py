@@ -15,6 +15,7 @@ import keras.backend as K
 import numpy as np
 import networkx as nx
 from utils import plot_training
+from GumbelSoftMax import GumbelSoftMax
 
 class CodingSampler(keras.layers.Layer):
     
@@ -33,6 +34,7 @@ class latent_loss(keras.losses.Loss):
 """
     Generate training set of nets
 """
+hard = True # If True reconstructed adj matrix is given as binary random variables, if False as probabilities.
 train_size = 100 
 n = 100 # num nodes in contact network
 p_vals = np.array([0.03]*train_size)
@@ -62,11 +64,22 @@ demon_encoder.summary()
     Set up the demon decoder model
     Demon outputs an n x n set of probabilities that each pair is connected  
 """
+temp = 0.1 # temp scalar for GumbelSoftMax
 decoder_inputs = keras.layers.Input(shape=[coding_dim])
 x = keras.layers.Dense(100,activation="selu")(decoder_inputs)
 x = keras.layers.Dense(150,activation="selu")(x)
+
+#New way with output as relu(sign(x))
 x = keras.layers.Dense(n * n,activation="sigmoid")(x)
+x = keras.layers.Reshape([n*n])(x)
+x = GumbelSoftMax(temp)(x)
 outputs = keras.layers.Reshape([n,n])(x)
+
+# Old way
+#if hard:
+#    outputs = keras.layers.Lambda(lambda x: tf.nn.relu(tf.sign(x - tf.random.uniform(shape=[n,n], minval=0, maxval=1))))(outputs)
+#    #outputs = keras.layers.Lambda(lambda x: x + tf.random.uniform(shape=[n,n], minval=-0.01, maxval=0.01))(outputs) # test if this blocks backprop of gradients -- does not
+
 demon_decoder = keras.Model(inputs=[decoder_inputs],outputs=[outputs])
 demon_decoder.summary()
 
@@ -78,7 +91,7 @@ demon.summary()
 """
     Set training params
 """
-batch_size = 10
+batch_size = 1
 epochs = 1000
 latent_loss_fn = latent_loss()
 reconstruction_loss_fn = keras.losses.BinaryCrossentropy(from_logits=False)
@@ -95,6 +108,7 @@ optimizer = keras.optimizers.Adam(lr=1e-3)
     Reminder: We would want to take the mean loss over all instances in the batch if batch_size > 1
 """
 episode_losses = []
+episode_rec_losses = []
 for episode in range(epochs):
     
     # Sample realizations for training batch
@@ -114,17 +128,22 @@ for episode in range(epochs):
         print('Episode: ' + str(episode) + '; Loss: ' + f'{loss.numpy():.3f}' + '; Latent Loss: ' + f'{lat_loss.numpy():.3f}' + '; Reconstruction Loss: ' + f'{rec_loss.numpy():.3f}')
 
     episode_losses.append(loss.numpy())
+    episode_rec_losses.append(rec_loss.numpy())
 
 plot_training(episode_losses,'Loss','loss_by_episode.png')
+plot_training(episode_rec_losses,'Loss','reconst_loss_by_episode.png')
 
 """
     Compare statistical properties of demon-generated vs. ER-generated nets
 """
 test_size = 100
 rand_codings = tf.random.normal(shape=[test_size,coding_dim])
-demon_probs = demon_decoder(rand_codings).numpy()
-diffs = demon_probs - np.random.uniform(low=0.0, high=1.0, size=(test_size,n,n))
-demon_test_nets = np.where(diffs < 0, 0, 1)
+if hard:
+    demon_test_nets = demon_decoder(rand_codings).numpy()
+else:
+    demon_probs = demon_decoder(rand_codings).numpy()
+    diffs = demon_probs - np.random.uniform(low=0.0, high=1.0, size=(test_size,n,n))
+    demon_test_nets = np.where(diffs < 0, 0, 1)
     
 
 p_vals = np.array([0.03]*test_size)
@@ -214,5 +233,5 @@ test_dict = {'Mean Degree': mean_degree,
              'Final size': final_size,
              'Net Type': net_type} 
 df = pd.DataFrame(test_dict)
-results_file = 'demon_net_reconstruction_stats_batch.csv'
+results_file = 'demon_net_reconstruction_stats_binary.csv'
 df.to_csv(results_file,index=False) 
