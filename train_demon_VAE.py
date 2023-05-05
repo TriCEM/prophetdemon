@@ -64,19 +64,26 @@ demon_encoder.summary()
     Set up the demon decoder model
     Demon outputs an n x n set of probabilities that each pair is connected  
 """
-temp = 0.1 # temp scalar for GumbelSoftMax
+# Original way -- decoder outputs contact probs instead of binary contacts
+#decoder_inputs = keras.layers.Input(shape=[coding_dim])
+#x = keras.layers.Dense(100,activation="selu")(decoder_inputs)
+#x = keras.layers.Dense(150,activation="selu")(x)
+#x = keras.layers.Dense(n * n,activation="sigmoid")(x)
+#outputs = keras.layers.Reshape([n,n])(x)
+
+"""
+    Using GumbelSoftMax as a differentiable function to draw Bernouli random variables
+    As temp -> 0, the softmax computation smoothly approaches the argmax, 
+    As temp -> goes to Inf, the sample vectors become uniform    
+"""
+temp = 1.0 # temp scalar for GumbelSoftMax
 decoder_inputs = keras.layers.Input(shape=[coding_dim])
 x = keras.layers.Dense(100,activation="selu")(decoder_inputs)
 x = keras.layers.Dense(150,activation="selu")(x)
-
-#New way with output as relu(sign(x))
 x = keras.layers.Dense(n * n,activation="sigmoid")(x)
-#x = keras.layers.Reshape([n,n])(x)
-#x = keras.layers.Reshape([n*n,])(x)
-outputs = GumbelSoftMax(temp)(x)
+outputs = GumbelSoftMax(temp)(x) # outputs is (n,n) array
 
-
-# Old way
+# Using relu(sign(x)) to convert to binary - does not seem to work
 #if hard:
 #    outputs = keras.layers.Lambda(lambda x: tf.nn.relu(tf.sign(x - tf.random.uniform(shape=[n,n], minval=0, maxval=1))))(outputs)
 #    #outputs = keras.layers.Lambda(lambda x: x + tf.random.uniform(shape=[n,n], minval=-0.01, maxval=0.01))(outputs) # test if this blocks backprop of gradients -- does not
@@ -123,6 +130,10 @@ for episode in range(epochs):
        loss = lat_loss + rec_loss # latent loss plus reconstruction loss
 
     grads = tape.gradient(loss, demon.trainable_variables)
+    
+    for g in grads:
+        print(g)
+    
     optimizer.apply_gradients(zip(grads, demon.trainable_variables))   
 
     if episode % 10 == 0:

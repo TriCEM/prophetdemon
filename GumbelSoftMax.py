@@ -46,7 +46,6 @@ class GumbelSoftMax(keras.layers.Layer):
         """
         
         #probs = tf.reshape(probs, [self.n,1])
-        #probs = tf.transpose(probs)
         #probs = tf.reshape(probs, [-1])
         one_minus_probs = 1.0 - probs
         logits = tf.math.log(tf.concat([probs, one_minus_probs], 0))
@@ -62,11 +61,9 @@ class GumbelSoftMax(keras.layers.Layer):
         if self.hard:
           #y_hard = tf.cast(tf.one_hot(tf.argmax(y,1),tf.shape(logits)[-1]), y.dtype)
           y_hard = tf.cast(tf.equal(y,tf.reduce_max(y,1,keepdims=True)),y.dtype)
-          y = tf.stop_gradient(y_hard - y) + y
+          y = tf.stop_gradient(y_hard - y) + y # likely to prevent overflow, see: https://www.tensorflow.org/api_docs/python/tf/stop_gradient
         
         y = tf.reshape(y[:,0], [self.n,self.n]) # treat first column as Bernouli random variable
-        #y = tf.transpose(y[:,0])
-        #y = y[:,0]
         
         return y
     
