@@ -34,7 +34,6 @@ class latent_loss(keras.losses.Loss):
 """
     Generate training set of nets
 """
-hard = True # If True reconstructed adj matrix is given as binary random variables, if False as probabilities.
 train_size = 100 
 n = 100 # num nodes in contact network
 p_vals = np.array([0.03]*train_size)
@@ -76,12 +75,13 @@ demon_encoder.summary()
     As temp -> 0, the softmax computation smoothly approaches the argmax, 
     As temp -> goes to Inf, the sample vectors become uniform    
 """
-temp = 1.0 # temp scalar for GumbelSoftMax
+hard = False # If True reconstructed adj matrix is given as binary random variables, if False as probabilities.
+temp = 1. # temp scalar for GumbelSoftMax
 decoder_inputs = keras.layers.Input(shape=[coding_dim])
 x = keras.layers.Dense(100,activation="selu")(decoder_inputs)
 x = keras.layers.Dense(150,activation="selu")(x)
 x = keras.layers.Dense(n * n,activation="sigmoid")(x)
-outputs = GumbelSoftMax(temp)(x) # outputs is (n,n) array
+outputs = GumbelSoftMax(temp,hard=hard)(x) # outputs is (n,n) array
 
 # Using relu(sign(x)) to convert to binary - does not seem to work
 #if hard:
@@ -131,13 +131,16 @@ for episode in range(epochs):
 
     grads = tape.gradient(loss, demon.trainable_variables)
     
-    for g in grads:
-        print(g)
+    #for g in grads:
+    #    print(g)
     
     optimizer.apply_gradients(zip(grads, demon.trainable_variables))   
 
     if episode % 10 == 0:
         print('Episode: ' + str(episode) + '; Loss: ' + f'{loss.numpy():.3f}' + '; Latent Loss: ' + f'{lat_loss.numpy():.3f}' + '; Reconstruction Loss: ' + f'{rec_loss.numpy():.3f}')
+        print()
+        print(np.mean(np.sum(reconstructions,axis=0)))
+        print()
 
     episode_losses.append(loss.numpy())
     episode_rec_losses.append(rec_loss.numpy())
