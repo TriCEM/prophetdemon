@@ -9,6 +9,7 @@
 # personal files
 sandbox/
 my_ignore/
+design_engineering.md
 
 # pkgdown files
 docs
@@ -33,3 +34,6 @@ docs
 # MAC files
 .DS_Store
 inst/doc
+
+# Python Virt Env
+venv/
