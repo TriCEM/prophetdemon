@@ -110,7 +110,8 @@ summary(demon)
 # generate training set
 #...............................
 train_size <- 5e3
-rewireprob <- rnbinom(n = train_size, size = 5, mu = 25)/n
+rewireprob <- runif(train_size, min = 0.1, max = 0.75)
+
 train_dat <- lapply(rewireprob, function(x, n){
   out <- igraph::erdos.renyi.game(n = n,
                                   p.or.m = x,
@@ -123,7 +124,7 @@ train_dat <- lapply(rewireprob, function(x, n){
 #......................
 # setting up epoch/epochs
 #......................
-epochs <- 500 # number of times to explore the batched training data
+epochs <- 50 # number of times to explore the batched training data
 epochs_losses <- rep(NA, epochs)
 batch_size <- 1
 reconstruction_loss_fn <- keras::keras$losses$BinaryCrossentropy(from_logits = F)
