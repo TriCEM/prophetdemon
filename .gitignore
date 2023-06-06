@@ -1,3 +1,5 @@
+# MAC files
+.DS_Store
 .DS_Store
 .ini
 
@@ -130,3 +132,36 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# History files
+.Rhistory
+.Rapp.history
+
+# Session Data files
+.RData
+
+# personal files
+sandbox/
+my_ignore/
+design_engineering.md
+
+# pkgdown files
+docs
+
+# RStudio files
+.Rproj.user/
+
+# knitr and R markdown default cache directories
+/*_cache/
+/cache/
+
+# Temporary files created by R markdown
+*.utf8.md
+*.knit.md
+
+# knitr outputs
+*.pdf
+*.html
+*.docx
+
+
