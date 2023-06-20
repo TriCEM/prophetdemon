@@ -12,7 +12,10 @@ RoxygenNote: 7.2.3
 Imports: 
   R6,
   keras, 
-  tensorflow
+  tensorflow,
+  magrittr,
+  tidyr,
+  tibble
 Suggests: 
     covr,
     testthat (>= 3.0.0)
