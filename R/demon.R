@@ -28,6 +28,11 @@ Encoder(keras$layers$Layer) %py_class% {
     super$initialize(name = name, ...)
     self$codings_proj <- layer_dense(units = intermediate_dim,
                                      activation = "relu")
+    self$additional_dense1 <- layer_dense(units = intermediate_dim,
+                                         activation = "selu") #add layer 1
+    self$dropout <- layer_dropout(rate = 0.5)  # Dropout layer
+    self$additional_dense2 <-layer_dense(units = abs(intermediate_dim - 50),
+                                         activation = "sigmoid") #add layer 2
     self$codings_mean <- layer_dense(units = latent_dim)
     self$codings_log_var <- layer_dense(units = latent_dim)
     self$sampling <- CodingSampler()
@@ -35,6 +40,9 @@ Encoder(keras$layers$Layer) %py_class% {
 
   call <- function(inputs) {
     x <- self$codings_proj(inputs)
+    x <- self$additional_dense1(x)
+    x <-  self$dropout(x)
+    x <- self$additional_dense2(x)
     codings_mean <- self$codings_mean(x)
     codings_log_var <- self$codings_log_var(x)
     codings <- self$sampling(c(codings_mean, codings_log_var))
@@ -55,12 +63,20 @@ Decoder(keras$layers$Layer) %py_class% {
     super$initialize(name = name, ...)
     self$codings_proj <- keras::layer_dense(units = intermediate_dim,
                                             activation = "relu")
+    self$additional_dense1 <- layer_dense(units = intermediate_dim,
+                                          activation = "selu") #add layer 1
+    self$dropout <- layer_dropout(rate = 0.5)  # Dropout layer
+    self$additional_dense2 <-layer_dense(units = abs(intermediate_dim - 50),
+                                         activation = "sigmoid") #add layer 2
     self$codings_output <- keras::layer_dense(units = original_dim,
                                               activation = "sigmoid")
   }
 
   call <- function(inputs) {
     x <- self$codings_proj(inputs)
+    x <- self$additional_dense1(x)
+    x <- self$dropout(x)
+    x <- self$additional_dense2(x)
     self$codings_output(x)
   }
 }
@@ -73,7 +89,7 @@ Decoder(keras$layers$Layer) %py_class% {
 #' @noMd
 #' @noRd
 
-VariationalAutoEncoder(keras$Model) %py_class% {
+DemonVariationalAutoEncoder(keras$Model) %py_class% {
   classname = "VAE: Combines the encoder and decoder into an end-to-end model"
   public = list(encoder = NULL,
                 decoder = NULL,
@@ -128,6 +144,11 @@ DecoderGS(keras$layers$Layer) %py_class% {
     super$initialize(name = name, ...)
     self$codings_proj <- keras::layer_dense(units = intermediate_dim,
                                             activation = "relu")
+    self$additional_dense1 <- layer_dense(units = intermediate_dim,
+                                         activation = "selu") #add layer 1
+    self$dropout <- layer_dropout(rate = 0.5)  # Dropout layer
+    self$additional_dense2 <-layer_dense(units = abs(intermediate_dim - 50),
+                                         activation = "sigmoid") #add layer 2
     self$codings_output <- keras::layer_dense(units = original_dim,
                                               activation = "linear") # need linear for logits --> Gumbell-Softmax; NB linear activation function is essentially a no-op, so output is just the weighted sum of the inputs plus the bias term aka "logits" as the raw outputs of a classification model.
     self$softmax_temp <- softmax_temp
@@ -136,6 +157,9 @@ DecoderGS(keras$layers$Layer) %py_class% {
 
   call <- function(inputs) {
     x <- self$codings_proj(inputs)
+    x <- self$additional_dense1(x)
+    x <- self$dropout(x)
+    x <- self$additional_dense2(x)
     logits <- self$codings_output(x) # These are now logits
     # Apply Gumbel-Softmax trick
     Uret <- tensorflow::tf$random$uniform(shape = tensorflow::tf$shape(logits), minval = 0, maxval = 1)
@@ -159,7 +183,7 @@ DecoderGS(keras$layers$Layer) %py_class% {
 #' @noMd
 #' @noRd
 
-VariationalAutoEncoderGS(keras$Model) %py_class% {
+DemonVariationalAutoEncoderGS(keras$Model) %py_class% {
   classname = "VAE Gumbel-Softmax: Combines the encoder and decoder into an end-to-end model"
   public = list(encoder = NULL,
                 decoder = NULL,
