@@ -113,5 +113,96 @@ VariationalAutoEncoder(keras$Model) %py_class% {
 }
 
 
+#' @title Decoder Gumbel Softmax for Demon VAE
+#' @noMd
+#' @noRd
+
+DecoderGS(keras$layers$Layer) %py_class% {
+  "Converts z-codings, the encoded digit vector, back into a adjacency matrix."
+
+  initialize <- function(original_dim,
+                         intermediate_dim,
+                         softmax_temp,
+                         hard,
+                         name = "decoder", ...) {
+    super$initialize(name = name, ...)
+    self$codings_proj <- keras::layer_dense(units = intermediate_dim,
+                                            activation = "relu")
+    self$codings_output <- keras::layer_dense(units = original_dim,
+                                              activation = "linear") # need linear for logits --> Gumbell-Softmax; NB linear activation function is essentially a no-op, so output is just the weighted sum of the inputs plus the bias term aka "logits" as the raw outputs of a classification model.
+    self$softmax_temp <- softmax_temp
+    self$hard <- hard
+  }
+
+  call <- function(inputs) {
+    x <- self$codings_proj(inputs)
+    logits <- self$codings_output(x) # These are now logits
+    # Apply Gumbel-Softmax trick
+    Uret <- tensorflow::tf$random$uniform(shape = tensorflow::tf$shape(logits), minval = 0, maxval = 1)
+    gumbel_noise <- -tensorflow::tf$math$log(-tensorflow::tf$math$log(Uret + 1e-20) + 1e-20)
+    gumbel_softmax_sample = tensorflow::tf$nn$softmax( (logits + gumbel_noise) /  self$softmax_temp )
+    if (self$hard) {
+      k = tf$shape(logits)[-1]
+      gumbel_softmax_sample_hard <- tensorflow::tf$cast(tensorflow::tf$equal(gumbel_softmax_sample, tensorflow::tf$reduce_max(gumbel_softmax_sample, as.integer(1), keepdims = TRUE)), gumbel_softmax_sample$dtype)
+      gumbel_softmax_sample <- tensorflow::tf$stop_gradient(gumbel_softmax_sample_hard - gumbel_softmax_sample) + gumbel_softmax_sample
+    }
+    gumbel_softmax_sample
+  }
+}
+
+
+#' @title VAE Gumbel-Softmax: Combined Encoder-Decoder for full Demon
+#' @param
+#' @description
+#' @details
+#' @returns
+#' @noMd
+#' @noRd
+
+VariationalAutoEncoderGS(keras$Model) %py_class% {
+  classname = "VAE Gumbel-Softmax: Combines the encoder and decoder into an end-to-end model"
+  public = list(encoder = NULL,
+                decoder = NULL,
+                original_dim = NULL,
+                intermediate_dim = NULL,
+                latent_dim = NULL,
+                softmax_temp = NULL,
+                hard = NULL,
+
+                initialize <- function(original_dim, intermediate_dim, latent_dim,
+                                       softmax_temp, hard = TRUE,
+                                       name = "autoencoder", ...) {
+                  super$initialize(name = name, ...)
+                  self$original_dim <- original_dim
+
+                  self$encoder <- Encoder(
+                    latent_dim = latent_dim,
+                    intermediate_dim = intermediate_dim
+                  )
+                  self$decoder <- DecoderGS(
+                    original_dim,
+                    intermediate_dim = intermediate_dim,
+                    softmax_temp = softmax_temp,
+                    hard = hard
+                  )
+                  # fill in info for viewing
+                  self$original_dim <- original_dim
+                  self$intermediate_dim <- intermediate_dim
+                  self$latent_dim <- latent_dim
+
+                }
+  )
+
+  call <- function(inputs) {
+    c(codings_mean, codings_log_var, codings) %<-% self$encoder(inputs)
+    reconstructed <- self$decoder(codings)
+    # Add KL divergence regularization loss.
+    kl_loss <- -0.5 * tf$reduce_mean(codings_log_var - tf$square(codings_mean) - tf$exp(codings_log_var) + 1)
+    self$add_loss(kl_loss)
+    reconstructed
+  }
+}
+
+
 
 
