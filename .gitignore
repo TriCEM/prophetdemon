@@ -7,8 +7,10 @@
 .RData
 
 # personal files
+Davidsandbox/
 sandbox/
 my_ignore/
+design_engineering.md
 
 # pkgdown files
 docs
@@ -33,3 +35,8 @@ docs
 # MAC files
 .DS_Store
 inst/doc
+
+# Python Virt Env
+venv/
+
+demon_async_trained.tf/
