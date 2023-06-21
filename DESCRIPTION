@@ -15,7 +15,8 @@ Imports:
   tensorflow,
   magrittr,
   tidyr,
-  tibble
+  tibble,
+  reticulate
 Suggests: 
     covr,
     testthat (>= 3.0.0)
