@@ -38,3 +38,5 @@ inst/doc
 
 # Python Virt Env
 venv/
+
+demon_async_trained.tf/
