@@ -52,10 +52,10 @@ faustRL <- function(N, fomes_reps, fomes_beta, fomes_durI, fomes_rho,
   #............................................................
   goodegg::assert_single_int(N)
   goodegg::assert_single_int(fomes_reps)
-  goodegg::assert_single_bounded(fomes_beta, x = 0, right = Inf)
-  goodegg::assert_single_bounded(fomes_durI, x = 0, right = Inf)
-  goodegg::assert_single_bounded(epsilon, x = 0, right = 1)
-  goodegg::assert_single_bounded(gammafact, x = 0, right = 1)
+  goodegg::assert_single_bounded(fomes_beta, left = 0, right = Inf)
+  goodegg::assert_single_bounded(fomes_durI, left = 0, right = Inf)
+  goodegg::assert_single_bounded(epsilon, left = 0, right = 1)
+  goodegg::assert_single_bounded(gammafact, left = 0, right = 1)
   goodegg::assert_int(batch_size)
   goodegg::assert_numeric(trainwi)
   goodegg::assert_length(trainwi, 2)
@@ -186,9 +186,9 @@ faustRL <- function(N, fomes_reps, fomes_beta, fomes_durI, fomes_rho,
     latent_dim <- demon$latent_dim
     # demon makes new network
     random_latent_vectors <- matrix(rnorm(1 * latent_dim), nrow = 1, ncol = latent_dim)
-    inputnet <- matrix(demon$decoder(random_latent_vectors), nrow = N, ncol = N)
-    #TODO this is Gumbell Softmax
-    inputnet <- round(new_net, digits = 0)
+    inputnet <- sapply(as.numeric(demon$decoder(random_latent_vectors)), function(x){x > runif(1)})
+    #TODO make this Gumbell Softmax
+    inputnet <- matrix(inputnet, nrow = N, ncol = N)
     # TODO this is symmetry problem
     inputnet[lower.tri(inputnet)] <- t(inputnet)[lower.tri(inputnet)]
     # don't make demon care about diagonal
@@ -262,8 +262,14 @@ faustRL <- function(N, fomes_reps, fomes_beta, fomes_durI, fomes_rho,
   #++++++++++++++++++++++++++++++++++++++++++
   ###  Step Through Iterations       ####
   #++++++++++++++++++++++++++++++++++++++++++
+  # set up new progress bar
+  pb <- txtProgressBar(min = 1, max = steps, initial = 1, style = 3)
   # Start the episode
   for (step in 1:steps) {
+    # call progress bar
+    setTxtProgressBar(pb, step)
+    # call out
+    cat("Step: ", step)
     # Choose an action
     action <- choose_action(model = DQN, state = currstate, epsilon = epsilon)
 
@@ -294,7 +300,8 @@ faustRL <- function(N, fomes_reps, fomes_beta, fomes_durI, fomes_rho,
     # Update the state
     state <- next_state
   }
-
+  # close progress bar
+  close(pb)
   #............................................................
   # out
   # show how prophet and demon were trained
