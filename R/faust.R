@@ -102,10 +102,13 @@ faustRL <- function(N, fomes_reps, fomes_beta, fomes_durI, fomes_rho,
     # maximum variance is:
     maxvar <- var( c(rep(1,floor(length(fs)/2)), rep(N, floor(length(fs)/2))) )
     normalized_fsvar = fsvar / maxvar # min variance is 0
-
-
+    # convert to degrees
+    # so that we can pretend like this is a "see-saw" problem
+    # prediction will be positive degrees
+    predt <- fsaccupred * trainwi[1] * 180
+    fst <- normalized_fsvar * trainwi[2] * -180
     # balance eq
-    return( fsaccupred*trainwi[1] + normalized_fsvar *trainwi[2] )
+    return( predt + fst)
   }
 
   #...................
@@ -215,12 +218,13 @@ faustRL <- function(N, fomes_reps, fomes_beta, fomes_durI, fomes_rho,
     fspred <- as.numeric(prophet$predict(inputnettens))
 
     # initial state
+    # pretending here that this is an angle like a "see-saw"
     balance <- balance_prophet_demon(fs = currfomes_fs,
                                      fspred = fspred,
                                      N = N, trainwi = trainwi)
 
     # our max reward is 2
-    reward <- -abs(balance - 2) #abs here in case kernel density misbehaves
+    reward <- -abs(angle - 90) #abs here in case kernel density misbehaves
     return(list(
       balance = balance,
       reward = reward
@@ -254,6 +258,7 @@ faustRL <- function(N, fomes_reps, fomes_beta, fomes_durI, fomes_rho,
   fspred <- as.numeric(prophet$predict(inputnettens))
 
   # initial state
+  # pretending here that this is an angle like a "see-saw"
   currstate <- balance_prophet_demon(fs = currfomes_fs,
                                      fspred = fspred,
                                      N = N, trainwi = trainwi)
@@ -269,7 +274,7 @@ faustRL <- function(N, fomes_reps, fomes_beta, fomes_durI, fomes_rho,
     # call progress bar
     setTxtProgressBar(pb, step)
     # call out
-    cat("Step: ", step)
+    cat("\n", "Step: ", step, "\n")
     # Choose an action
     action <- choose_action(model = DQN, state = currstate, epsilon = epsilon)
 
